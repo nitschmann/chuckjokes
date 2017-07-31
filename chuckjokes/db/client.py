@@ -34,6 +34,17 @@ class DbClient(object):
         if os.getenv("ENV") == "test":
             self.__setup_db_schema()
 
+    def reset_db(self):
+        """Resets the whole DB and its' entries"""
+
+        if self.connection is not None:
+            self.close_connection()
+
+            if os.getenv("ENV") != "test":
+                os.remove(self.__db_file)
+
+            self.__setup_db_connection()
+
     # private
 
     def __create_db_file_dir_if_not_exists(self):

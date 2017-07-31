@@ -3,6 +3,7 @@ import click
 
 from chuckjokes import Category, Joke
 from chuckjokes.norris import ascii_art
+from chuckjokes.db.client import DbClient
 from chuckjokes.db.exceptions import ValuesAreNotUniqueException
 from prettytable import PrettyTable
 
@@ -68,6 +69,7 @@ def new_joke(category, unique, persist):
     Fetches a new joke from the API and persists it locally (if wanted),
     unless it was already fetched.
     """
+
     new_joke = Joke.random_from_api(category=category)
 
     if persist == True:
@@ -78,3 +80,13 @@ def new_joke(category, unique, persist):
             click.echo("Sorry, Chuck is out of Jokes currently. Event he needs breakes from time to time :/")
     else:
         click.echo(new_joke.value)
+
+@cli.group("storage")
+def storage_group():
+    """Local storage management"""
+    pass
+
+@storage_group.command("reset")
+def reset_storage():
+    """Resets the whole storage"""
+    DbClient().reset_db()
