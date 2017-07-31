@@ -2,6 +2,7 @@ import chuckjokes.api.jokes as jokes_api
 import click
 
 from chuckjokes import Category, Joke
+from chuckjokes.norris import ascii_art
 from chuckjokes.db.exceptions import ValuesAreNotUniqueException
 from prettytable import PrettyTable
 
@@ -15,6 +16,7 @@ def cli():
 @click.option("--local", "-l", is_flag=True, help="just show the local available categories")
 def all_categories(local):
     """Returns a list of all available categories for jokes"""
+
     categories = []
     if local == True:
         categories = list(map((lambda c: c.name), Category.all()))
@@ -22,6 +24,13 @@ def all_categories(local):
         categories = jokes_api.categories()
 
     click.echo(categories)
+
+@cli.command("norris")
+def norris():
+    """Fun ;)"""
+
+    click.echo(ascii_art())
+    click.echo("HAHAHA! You have been catched by Chuck Norris!")
 
 @cli.group("jokes")
 def jokes_group():
@@ -32,6 +41,7 @@ def jokes_group():
 @click.option("--category", "-c", default=None, help="just return jokes saved under specific category")
 def all_jokes(category):
     """Prints all jokes which have already been read"""
+
     jokes = []
 
     if category is not None:

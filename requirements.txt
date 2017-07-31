@@ -1,4 +1,5 @@
 appdirs
 click
 prettytable
+pillow
 requests

@@ -1,4 +1,5 @@
-import os, sqlite3
+import os
+import sqlite3
 
 from appdirs import user_data_dir
 
