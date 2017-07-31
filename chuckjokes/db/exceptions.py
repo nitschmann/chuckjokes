@@ -1,0 +1,2 @@
+class ValuesAreNotUniqueException(Exception):
+    pass

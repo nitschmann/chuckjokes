@@ -1,143 +1,67 @@
-import chuckjokes.api.jokes as jokes
+import chuckjokes.api.jokes as jokes_api
 
-from chuckjokes.api import Request as ApiRequest
-from chuckjokes.db.client import DbClient
+from . import category
+from chuckjokes.db import Entity
 
-class Joke:
-    def __init__(self, api_id, value, categories = None):
-        self.id = None
-        self.api_id = api_id
-        self.value = value
-        self.categories = categories
-        self.created_at = None
-        self.updated_at = None
+class Joke(Entity):
+    __table__ = "jokes"
+    __columns__ = ["api_id", "value"]
+    __extra_attributes__ = ["categories"]
+    __unique_columns__ = ["api_id"]
+    __timestampes__ = True
 
-    def api_url(self):
-        return ApiRequest.API_BASE_URL + "/jokes/" + self.api_id
-
-    @classmethod
-    def all(cls):
-        cursor = DbClient().connection.cursor()
-        results = []
-
-        try:
-            sql_query = "SELECT * FROM jokes ORDER BY created_at DESC;"
-            cursor.execute(sql_query)
-            db_results = cursor.fetchall()
-
-            if len(db_results) > 0:
-                for record in db_results:
-                    results.append(cls.__init_from_sql_row(record))
-        finally:
-            cursor.close()
-
-        return results
-
-    @classmethod
-    def find(cls, record_id):
-        cursor = DbClient().connection.cursor()
-        result = None
-
-        try:
-            sql_query = "SELECT * FROM jokes WHERE id=? LIMIT 1;"
-            cursor.execute(sql_query, (record_id,))
-            db_results = cursor.fetchall()
-
-            if len(db_results) > 0:
-                result = cls.__init_from_sql_row(db_results[0])
-        finally:
-            cursor.close()
-
-        return result
-
-    @classmethod
-    def find_by_api_id(cls, api_id):
-        cursor = DbClient().connection.cursor()
-        result = None
-
-        try:
-            sql_query = "SELECT * FROM jokes WHERE api_id=? LIMIT 1;"
-            cursor.execute(sql_query, (api_id,))
-            db_results = cursor.fetchall()
-
-            if len(db_results) > 0:
-                result = cls.__init_from_sql_row(db_results[0])
-        finally:
-            cursor.close()
-
-        return result
-
-    @classmethod
-    def random_from_api(cls, category = None):
-        joke = jokes.random(category)
-        return cls(api_id=joke["id"], value=joke["value"], categories=joke["category"])
-
-
-    # TODO: Clean this method a little bit later
-    def save(self):
-        was_persisted = False
-
-        if self.id:
-            was_persisted = True
-        elif self.api_id and not was_persisted:
-            record = self.__class__.find_by_api_id(self.api_id)
-
-            if record:
-                self.id = record.id
-                was_persisted = True
-            else:
-                record_id = self.__create_new_record()
-                self.id = record_id
-                was_persisted = False
-        else:
-            record_id = self.__create_new_record()
-            self.id = record_id
-            was_persisted = False
-
-        if was_persisted:
-            self.__update_record()
+    def save(self, check_uniqueness_conditions = True):
+        super(Joke, self).save()
+        self.__save_categories()
 
         return True
 
-    def __create_new_record(self):
-        cursor = DbClient().connection.cursor()
-        record_id = None
+    @classmethod
+    def random_from_api(cls, category = None):
+        """Fetches a new joke from the API and return an instance"""
 
-        try:
-            sql_query = """
-            INSERT INTO jokes(api_id,value,created_at,updated_at)
-                VALUES(?,?,DATETIME('NOW'),DATETIME('NOW'));
-            """
-            cursor.execute(sql_query, (self.api_id, self.value))
-            record_id = cursor.lastrowid
-
-            DbClient().connection.commit()
-        finally:
-            cursor.close()
-
-        return record_id
-
-    def __update_record(self):
-        cursor = DbClient().connection.cursor()
-
-        try:
-            sql_query = """
-            UPDATE jokes SET
-                api_id = ?,
-                value = ?,
-                updated_at = DATETIME('NOW')
-            WHERE id = ?;
-            """
-            cursor.execute(sql_query, (self.api_id, self.value, self.id))
-            DbClient().connection.commit()
-        finally:
-            cursor.close()
+        joke = jokes_api.random(category)
+        return cls(api_id=joke["id"], value=joke["value"], categories=joke["category"])
 
     @classmethod
-    def __init_from_sql_row(cls, record):
-        instance = cls(api_id=record[1], value=record[2])
-        instance.id = record[0]
-        instance.created_at = record[3]
-        instance.updated_at = record[4]
+    def random_from_api_unique(cls, category = None, max_tries = 10):
+        """
+        Same as cls.random_from_api with the difference that this method
+        ensurces that the Joke was never read before. It is so long executed
+        until the limit of max_tries is reached.
+        """
 
-        return instance
+        joke = None
+        i = 0
+
+        while i < max_tries:
+            joke = cls.random_from_api(category=category)
+
+            if cls.find_by("api_id", joke.api_id) is None:
+                break
+            else:
+                i += 1
+
+        return joke
+
+    def __save_categories(self):
+        if type(self.categories) == list:
+            for category_name in self.categories:
+                c = category.Category.find_or_create_by_name(category_name)
+                self.__save_categories_relation(category_id = c.id)
+
+    def __save_categories_relation(self, category_id):
+        cursor = self.db_client.connection.cursor()
+
+        try:
+            sql_query = """
+            INSERT INTO joke_categories(jokes_id,categories_id)
+                SELECT ?, ?
+                WHERE NOT EXISTS(SELECT 1 FROM joke_categories WHERE jokes_id =
+                ? AND categories_id = ?);
+            """
+
+            cursor.execute(sql_query, (self.id,category_id,self.id,category_id))
+            self.db_client.connection.commit()
+        finally:
+            cursor.close()

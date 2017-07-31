@@ -18,6 +18,21 @@ class DbClient(object):
         self.__setup_db_connection()
         self.__initialized = True
 
+    def close_connection(self, commit = False):
+        """Closes the connection to the DB"""
+        if self.connection:
+            if commit == True:
+                self.connection.commit()
+
+            self.connection.close()
+
+    def reconnect(self):
+        """Reconnects to the DB if wanted"""
+        self.connection = sqlite3.connect(self.__db_file)
+
+        if os.getenv("ENV") == "test":
+            self.__setup_db_schema()
+
     # private
 
     def __create_db_file_dir_if_not_exists(self):
@@ -37,9 +52,12 @@ class DbClient(object):
         return contents
 
     def __setup_db_connection(self):
-        self.__db_file_dir = user_data_dir("chuckjokes")
-        self.__create_db_file_dir_if_not_exists()
-        self.__db_file = os.path.join(self.__db_file_dir, "jokes_db.sqlite")
+        if os.getenv("ENV") == "test":
+            self.__db_file = ":memory:"
+        else:
+            self.__db_file_dir = user_data_dir("chuckjokes")
+            self.__create_db_file_dir_if_not_exists()
+            self.__db_file = os.path.join(self.__db_file_dir, "jokes_db.sqlite")
 
         self.connection = sqlite3.connect(self.__db_file)
 
@@ -51,7 +69,5 @@ class DbClient(object):
 
         try:
             cursor.executescript(contents)
-        except Exception as e:
-            raise
         finally:
             cursor.close()
